@@ -322,7 +322,7 @@ bool CombatSpell::castSpell(const std::shared_ptr<Creature> &creature, const std
 		LuaVariant var;
 		if (combat->hasArea()) {
 			var.type = VARIANT_POSITION;
-			
+
 			if (needTarget && target) {
 				var.pos = target->getPosition();
 			} else if (needDirection && creature) {
