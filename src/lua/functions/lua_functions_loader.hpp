@@ -26,11 +26,13 @@ class Guild;
 class Zone;
 class KV;
 
+typedef double lua_Number;
+
 struct LuaVariant;
 
 #define reportErrorFunc(a) reportError(__FUNCTION__, a, true)
 
-class LuaFunctionsLoader {
+class Lua {
 public:
 	static void load(lua_State* L);
 
@@ -42,6 +44,7 @@ public:
 	static void pushThing(lua_State* L, const std::shared_ptr<Thing> &thing);
 	static void pushVariant(lua_State* L, const LuaVariant &var);
 	static void pushString(lua_State* L, const std::string &value);
+	static void pushNumber(lua_State* L, lua_Number value);
 	static void pushCallback(lua_State* L, int32_t callback);
 	static void pushCylinder(lua_State* L, const std::shared_ptr<Cylinder> &cylinder);
 
@@ -228,7 +231,6 @@ public:
 		new (userData) std::shared_ptr<T>(value);
 	}
 
-protected:
 	static void registerClass(lua_State* L, const std::string &className, const std::string &baseClass, lua_CFunction newFunction = nullptr);
 	static void registerSharedClass(lua_State* L, const std::string &className, const std::string &baseClass, lua_CFunction newFunction = nullptr);
 	static void registerMethod(lua_State* L, const std::string &globalName, const std::string &methodName, lua_CFunction func);

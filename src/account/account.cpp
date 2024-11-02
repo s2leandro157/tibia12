@@ -10,6 +10,7 @@
 #include "account/account.hpp"
 
 #include "account/account_repository_db.hpp"
+#include "account/account_info.hpp"
 #include "security/argon.hpp"
 #include "utils/tools.hpp"
 #include "enums/account_coins.hpp"
@@ -34,44 +35,44 @@ Account::Account(std::string descriptor) :
 	m_account->accountType = ACCOUNT_TYPE_NORMAL;
 }
 
-uint8_t Account::load() {
+AccountErrors_t Account::load() {
+	using enum AccountErrors_t;
 	if (m_account->id != 0 && g_accountRepository().loadByID(m_account->id, m_account)) {
 		m_accLoaded = true;
-		return enumToValue(AccountErrors_t::Ok);
+		return Ok;
 	}
 
 	if (!m_descriptor.empty() && g_accountRepository().loadByEmailOrName(getProtocolCompat(), m_descriptor, m_account)) {
 		m_accLoaded = true;
-		return enumToValue(AccountErrors_t::Ok);
+		return Ok;
 	}
 
 	if (!m_descriptor.empty() && g_accountRepository().loadBySession(m_descriptor, m_account)) {
 		m_accLoaded = true;
-		return enumToValue(AccountErrors_t::Ok);
+		return Ok;
 	}
 
 	updatePremiumTime();
-	return enumToValue(AccountErrors_t::LoadingAccount);
+	return LoadingAccount;
 }
 
-uint8_t Account::reload() {
+AccountErrors_t Account::reload() {
 	if (!m_accLoaded) {
-		return enumToValue(AccountErrors_t::NotInitialized);
+		return AccountErrors_t::NotInitialized;
 	}
 
 	return load();
 }
 
-uint8_t Account::save() const {
+AccountErrors_t Account::save() const {
 	using enum AccountErrors_t;
-
 	if (!m_accLoaded) {
-		return enumToValue(NotInitialized);
+		return NotInitialized;
 	}
 	if (!g_accountRepository().save(m_account)) {
-		return enumToValue(Storage);
+		return Storage;
 	}
-	return enumToValue(Ok);
+	return Ok;
 }
 
 std::tuple<uint32_t, AccountErrors_t> Account::getCoins(CoinType type) const {
@@ -82,7 +83,7 @@ std::tuple<uint32_t, AccountErrors_t> Account::getCoins(CoinType type) const {
 
 	uint32_t coins = 0;
 	if (!g_accountRepository().getCoins(m_account->id, type, coins)) {
-		return { 0, enumToValue(AccountErrors_t::Storage) };
+		return { 0, Storage };
 	}
 
 	return { coins, Ok };
@@ -105,7 +106,7 @@ AccountErrors_t Account::addCoins(CoinType type, const uint32_t &amount, const s
 	}
 
 	if (!g_accountRepository().setCoins(m_account->id, type, coins + amount)) {
-		return enumToValue(AccountErrors_t::Storage);
+		return Storage;
 	}
 
 	registerCoinTransaction(CoinTransactionType::Add, type, amount, detail);
@@ -120,7 +121,7 @@ AccountErrors_t Account::removeCoins(CoinType type, const uint32_t &amount, cons
 	}
 
 	if (amount == 0) {
-		return AccountErrors_t::Ok;
+		return Ok;
 	}
 
 	auto [coins, result] = getCoins(type);
@@ -135,7 +136,7 @@ AccountErrors_t Account::removeCoins(CoinType type, const uint32_t &amount, cons
 	}
 
 	if (!g_accountRepository().setCoins(m_account->id, type, coins - amount)) {
-		return enumToValue(AccountErrors_t::Storage);
+		return Storage;
 	}
 
 	registerCoinTransaction(CoinTransactionType::Remove, type, amount, detail);
@@ -211,12 +212,12 @@ void Account::setPremiumDays(const int32_t &days) {
 	return m_account->premiumDaysPurchased;
 }
 
-uint8_t Account::setAccountType(const uint8_t &accountType) {
+AccountErrors_t Account::setAccountType(AccountType accountType) {
 	m_account->accountType = accountType;
-	return enumToValue(AccountErrors_t::Ok);
+	return AccountErrors_t::Ok;
 }
 
-[[nodiscard]] uint8_t Account::getAccountType() const {
+[[nodiscard]] AccountType Account::getAccountType() const {
 	return m_account->accountType;
 }
 
@@ -224,10 +225,10 @@ void Account::updatePremiumTime() {
 	time_t lastDay = m_account->premiumLastDay;
 	uint32_t remainingDays = m_account->premiumRemainingDays;
 
-	const time_t currentTime = getTimeNow();
+	time_t currentTime = getTimeNow();
 
-	const auto daysLeft = static_cast<int32_t>((lastDay - currentTime) / 86400);
-	const auto timeLeft = static_cast<int32_t>((lastDay - currentTime) % 86400);
+	auto daysLeft = static_cast<int32_t>((lastDay - currentTime) / 86400);
+	auto timeLeft = static_cast<int32_t>((lastDay - currentTime) % 86400);
 
 	m_account->premiumRemainingDays = daysLeft > 0 ? daysLeft : 0;
 
@@ -243,14 +244,15 @@ void Account::updatePremiumTime() {
 		return;
 	}
 
-	if (AccountErrors_t::Ok != enumFromValue<AccountErrors_t>(save())) {
+	if (AccountErrors_t::Ok != save()) {
 		g_logger().error("Failed to update account premium time: [{}]", getDescriptor());
 	}
 }
 
-std::tuple<phmap::flat_hash_map<std::string, uint64_t>, uint8_t>
+std::tuple<phmap::flat_hash_map<std::string, uint64_t>, AccountErrors_t>
 Account::getAccountPlayers() const {
-	auto valueToReturn = enumToValue(m_accLoaded ? AccountErrors_t::Ok : AccountErrors_t::NotInitialized);
+	using enum AccountErrors_t;
+	auto valueToReturn = m_accLoaded ? Ok : NotInitialized;
 	return { m_account->players, valueToReturn };
 }
 
@@ -279,7 +281,7 @@ bool Account::authenticateSession() {
 }
 
 bool Account::authenticatePassword(const std::string &password) {
-	if (Argon2().argon(password, getPassword())) {
+	if (Argon2 {}.argon(password.c_str(), getPassword())) {
 		return true;
 	}
 
