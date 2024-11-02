@@ -7,26 +7,26 @@
  * Website: https://docs.opentibiabr.com/
  */
 
+#include "lua/functions/core/game/game_functions.hpp"
+
 #include "core.hpp"
 #include "creatures/monsters/monster.hpp"
+#include "creatures/monsters/monsters.hpp"
+#include "creatures/npcs/npc.hpp"
+#include "creatures/players/achievement/player_achievement.hpp"
 #include "game/functions/game_reload.hpp"
 #include "game/game.hpp"
-#include "items/item.hpp"
-#include "io/iobestiary.hpp"
-#include "io/io_bosstiary.hpp"
-#include "io/iologindata.hpp"
-#include "lua/functions/core/game/game_functions.hpp"
-#include "lua/functions/events/event_callback_functions.hpp"
 #include "game/scheduling/dispatcher.hpp"
-#include "lua/creature/talkaction.hpp"
-#include "lua/functions/creatures/npc/npc_type_functions.hpp"
-#include "lua/scripts/lua_environment.hpp"
-#include "lua/creature/events.hpp"
+#include "io/io_bosstiary.hpp"
+#include "io/iobestiary.hpp"
+#include "items/item.hpp"
 #include "lua/callbacks/event_callback.hpp"
 #include "lua/callbacks/events_callbacks.hpp"
-#include "creatures/players/achievement/player_achievement.hpp"
-#include "creatures/players/cyclopedia/player_badge.hpp"
-#include "creatures/players/cyclopedia/player_cyclopedia.hpp"
+#include "lua/creature/events.hpp"
+#include "lua/creature/talkaction.hpp"
+#include "lua/functions/creatures/npc/npc_type_functions.hpp"
+#include "lua/functions/events/event_callback_functions.hpp"
+#include "lua/scripts/lua_environment.hpp"
 #include "map/spectators.hpp"
 
 // Game
@@ -126,7 +126,7 @@ int GameFunctions::luaGameGetBestiaryList(lua_State* L) {
 	const bool name = getBoolean(L, 2, false);
 
 	if (lua_gettop(L) <= 2) {
-		const std::map<uint16_t, std::string> mtype_list = g_game().getBestiaryList();
+		const std::map<uint16_t, std::string> &mtype_list = g_game().getBestiaryList();
 		for (const auto &ita : mtype_list) {
 			if (name) {
 				pushString(L, ita.second);
@@ -342,7 +342,7 @@ int GameFunctions::luaGameCreateItem(lua_State* L) {
 			subType -= stackCount;
 		}
 
-		const auto item = Item::CreateItem(itemId, stackCount);
+		const auto &item = Item::CreateItem(itemId, stackCount);
 		if (!item) {
 			if (!hasTable) {
 				lua_pushnil(L);
@@ -698,7 +698,7 @@ int GameFunctions::luaGameGetInfluencedMonsters(lua_State* L) {
 	const auto &monsters = g_game().getInfluencedMonsters();
 	lua_createtable(L, static_cast<int>(monsters.size()), 0);
 	int index = 0;
-	for (const auto &monsterId : monsters) {
+	for (const auto monsterId : monsters) {
 		++index;
 		lua_pushnumber(L, monsterId);
 		lua_rawseti(L, -2, index);
@@ -762,7 +762,7 @@ int GameFunctions::luaGameGetFiendishMonsters(lua_State* L) {
 
 	lua_createtable(L, static_cast<int>(monsters.size()), 0);
 	int index = 0;
-	for (const auto &monsterId : monsters) {
+	for (const auto monsterId : monsters) {
 		++index;
 		lua_pushnumber(L, monsterId);
 		lua_rawseti(L, -2, index);

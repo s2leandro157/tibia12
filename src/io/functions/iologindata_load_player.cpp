@@ -7,13 +7,28 @@
  * Website: https://docs.opentibiabr.com/
  */
 
-#include "creatures/players/wheel/player_wheel.hpp"
-#include "creatures/players/achievement/player_achievement.hpp"
 #include "io/functions/iologindata_load_player.hpp"
-#include "game/game.hpp"
-#include "enums/object_category.hpp"
+
+#include "config/configmanager.hpp"
+#include "creatures/combat/condition.hpp"
+#include "creatures/monsters/monsters.hpp"
+#include "creatures/players/achievement/player_achievement.hpp"
+#include "creatures/players/cyclopedia/player_badge.hpp"
+#include "creatures/players/cyclopedia/player_cyclopedia.hpp"
+#include "creatures/players/cyclopedia/player_title.hpp"
+#include "creatures/players/vip/player_vip.hpp"
+#include "creatures/players/vocations/vocation.hpp"
+#include "creatures/players/wheel/player_wheel.hpp"
 #include "enums/account_coins.hpp"
 #include "enums/account_errors.hpp"
+#include "enums/object_category.hpp"
+#include "game/game.hpp"
+#include "io/ioguild.hpp"
+#include "io/ioprey.hpp"
+#include "items/containers/depot/depotchest.hpp"
+#include "items/containers/inbox/inbox.hpp"
+#include "items/containers/rewards/reward.hpp"
+#include "items/containers/rewards/rewardchest.hpp"
 #include "utils/tools.hpp"
 
 void IOLoginDataLoad::loadItems(ItemsMap &itemsMap, const DBResult_ptr &result, const std::shared_ptr<Player> &player) {
@@ -29,7 +44,7 @@ void IOLoginDataLoad::loadItems(ItemsMap &itemsMap, const DBResult_ptr &result, 
 			propStream.init(attr, attrSize);
 
 			try {
-				const auto item = Item::CreateItem(type, count);
+				const auto &item = Item::CreateItem(type, count);
 				if (item) {
 					if (!item->unserializeAttr(propStream)) {
 						g_logger().warn("[{}] - Failed to deserialize item attributes {}, from player {}, from account id {}", __FUNCTION__, item->getID(), player->getName(), player->getAccountId());
@@ -77,16 +92,16 @@ bool IOLoginDataLoad::preLoadPlayer(const std::shared_ptr<Player> &player, const
 		return false;
 	}
 
-	auto [coins, error] = player->account->getCoins(enumToValue(CoinType::Normal));
-	if (error != enumToValue(AccountErrors_t::Ok)) {
+	auto [coins, error] = player->account->getCoins(CoinType::Normal);
+	if (error != AccountErrors_t::Ok) {
 		g_logger().error("Failed to get coins for player {}, error {}", player->name, static_cast<uint8_t>(error));
 		return false;
 	}
 
 	player->coinBalance = coins;
 
-	auto [transferableCoins, errorT] = player->account->getCoins(enumToValue(CoinType::Transferable));
-	if (errorT != enumToValue(AccountErrors_t::Ok)) {
+	auto [transferableCoins, errorT] = player->account->getCoins(CoinType::Transferable);
+	if (errorT != AccountErrors_t::Ok) {
 		g_logger().error("Failed to get transferable coins for player {}, error {}", player->name, static_cast<uint8_t>(errorT));
 		return false;
 	}
@@ -597,22 +612,25 @@ void IOLoginDataLoad::loadPlayerDepotItems(const std::shared_ptr<Player> &player
 		loadItems(depotItems, result, player);
 		for (auto it = depotItems.rbegin(), end = depotItems.rend(); it != end; ++it) {
 			const std::pair<std::shared_ptr<Item>, int32_t> &pair = it->second;
-			const auto item = pair.first;
+			const auto &item = pair.first;
+			if (!item) {
+				continue;
+			}
 
 			int32_t pid = pair.second;
 			if (pid >= 0 && pid < 100) {
-				std::shared_ptr<DepotChest> depotChest = player->getDepotChest(pid, true);
+				const std::shared_ptr<DepotChest> &depotChest = player->getDepotChest(pid, true);
 				if (depotChest) {
 					depotChest->internalAddThing(item);
 					item->startDecaying();
 				}
 			} else {
-				ItemsMap::const_iterator it2 = depotItems.find(pid);
-				if (it2 == depotItems.end()) {
+				auto depotIt = depotItems.find(pid);
+				if (depotIt == depotItems.end()) {
 					continue;
 				}
 
-				std::shared_ptr<Container> container = it2->second.first->getContainer();
+				const std::shared_ptr<Container> &container = depotIt->second.first->getContainer();
 				if (container) {
 					container->internalAddThing(item);
 					// Here, the sub-containers do not yet have a parent, since the main backpack has not yet been added to the player, so we need to postpone
@@ -642,18 +660,22 @@ void IOLoginDataLoad::loadPlayerInboxItems(const std::shared_ptr<Player> &player
 
 		for (auto it = inboxItems.rbegin(), end = inboxItems.rend(); it != end; ++it) {
 			const std::pair<std::shared_ptr<Item>, int32_t> &pair = it->second;
-			const auto item = pair.first;
+			const auto &item = pair.first;
+			if (!item) {
+				continue;
+			}
+
 			int32_t pid = pair.second;
 			if (pid >= 0 && pid < 100) {
 				player->getInbox()->internalAddThing(item);
 				item->startDecaying();
 			} else {
-				ItemsMap::const_iterator it2 = inboxItems.find(pid);
-				if (it2 == inboxItems.end()) {
+				auto inboxIt = inboxItems.find(pid);
+				if (inboxIt == inboxItems.end()) {
 					continue;
 				}
 
-				std::shared_ptr<Container> container = it2->second.first->getContainer();
+				const std::shared_ptr<Container> &container = inboxIt->second.first->getContainer();
 				if (container) {
 					container->internalAddThing(item);
 					itemsToStartDecaying.emplace_back(item);
@@ -734,10 +756,6 @@ void IOLoginDataLoad::loadPlayerPreyClass(const std::shared_ptr<Player> &player,
 		query << "SELECT * FROM `player_prey` WHERE `player_id` = " << player->getGUID();
 		if ((result = db.storeQuery(query.str()))) {
 			do {
-				auto selectedRaceId = result->getNumber<uint16_t>("raceid");
-				if (selectedRaceId == 0) {
-					continue;
-				}
 				auto slot = std::make_unique<PreySlot>(static_cast<PreySlot_t>(result->getNumber<uint16_t>("slot")));
 				auto state = static_cast<PreyDataState_t>(result->getNumber<uint16_t>("state"));
 				if (slot->id == PreySlot_Two && state == PreyDataState_Locked) {
@@ -749,7 +767,7 @@ void IOLoginDataLoad::loadPlayerPreyClass(const std::shared_ptr<Player> &player,
 				} else {
 					slot->state = state;
 				}
-				slot->selectedRaceId = selectedRaceId;
+				slot->selectedRaceId = result->getNumber<uint16_t>("raceid");
 				slot->option = static_cast<PreyOption_t>(result->getNumber<uint16_t>("option"));
 				slot->bonus = static_cast<PreyBonus_t>(result->getNumber<uint16_t>("bonus_type"));
 				slot->bonusRarity = static_cast<uint8_t>(result->getNumber<uint16_t>("bonus_rarity"));
@@ -785,10 +803,6 @@ void IOLoginDataLoad::loadPlayerTaskHuntingClass(const std::shared_ptr<Player> &
 		query << "SELECT * FROM `player_taskhunt` WHERE `player_id` = " << player->getGUID();
 		if ((result = db.storeQuery(query.str()))) {
 			do {
-				auto selectedRaceId = result->getNumber<uint16_t>("raceid");
-				if (selectedRaceId == 0) {
-					continue;
-				}
 				auto slot = std::make_unique<TaskHuntingSlot>(static_cast<PreySlot_t>(result->getNumber<uint16_t>("slot")));
 				auto state = static_cast<PreyTaskDataState_t>(result->getNumber<uint16_t>("state"));
 				if (slot->id == PreySlot_Two && state == PreyTaskDataState_Locked) {
@@ -800,7 +814,7 @@ void IOLoginDataLoad::loadPlayerTaskHuntingClass(const std::shared_ptr<Player> &
 				} else {
 					slot->state = state;
 				}
-				slot->selectedRaceId = selectedRaceId;
+				slot->selectedRaceId = result->getNumber<uint16_t>("raceid");
 				slot->upgrade = result->getNumber<bool>("upgrade");
 				slot->rarity = static_cast<uint8_t>(result->getNumber<uint16_t>("rarity"));
 				slot->currentKills = result->getNumber<uint16_t>("kills");
@@ -907,18 +921,22 @@ void IOLoginDataLoad::bindRewardBag(const std::shared_ptr<Player> &player, Items
 void IOLoginDataLoad::insertItemsIntoRewardBag(const ItemsMap &rewardItemsMap) {
 	for (const auto &it : std::views::reverse(rewardItemsMap)) {
 		const std::pair<std::shared_ptr<Item>, int32_t> &pair = it.second;
-		const auto item = pair.first;
+		const auto &item = pair.first;
+		if (!item) {
+			continue;
+		}
+
 		int32_t pid = pair.second;
 		if (pid == 0) {
 			break;
 		}
 
-		auto it2 = rewardItemsMap.find(pid);
-		if (it2 == rewardItemsMap.end()) {
+		auto rewardIt = rewardItemsMap.find(pid);
+		if (rewardIt == rewardItemsMap.end()) {
 			continue;
 		}
 
-		std::shared_ptr<Container> container = it2->second.first->getContainer();
+		const std::shared_ptr<Container> &container = rewardIt->second.first->getContainer();
 		if (container) {
 			container->internalAddThing(item);
 		}

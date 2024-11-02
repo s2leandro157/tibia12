@@ -7,7 +7,7 @@
  * Website: https://docs.opentibiabr.com/
  */
 
-#include "player_achievement.hpp"
+#include "creatures/players/achievement/player_achievement.hpp"
 
 #include "creatures/players/player.hpp"
 #include "game/game.hpp"
@@ -48,7 +48,7 @@ bool PlayerAchievement::remove(uint16_t id) {
 		return false;
 	}
 
-	if (const auto &it = std::ranges::find_if(m_achievementsUnlocked, [id](auto achievement_it) {
+	if (auto it = std::ranges::find_if(m_achievementsUnlocked, [id](auto achievement_it) {
 			return achievement_it.first == id;
 		});
 	    it != m_achievementsUnlocked.end()) {
@@ -67,7 +67,7 @@ bool PlayerAchievement::isUnlocked(uint16_t id) const {
 		return false;
 	}
 
-	if (const auto &it = std::ranges::find_if(m_achievementsUnlocked, [id](auto achievement_it) {
+	if (auto it = std::ranges::find_if(m_achievementsUnlocked, [id](auto achievement_it) {
 			return achievement_it.first == id;
 		});
 	    it != m_achievementsUnlocked.end()) {

@@ -9,10 +9,10 @@
 
 #include "creatures/players/vip/player_vip.hpp"
 
-#include "io/iologindata.hpp"
-
-#include "game/game.hpp"
+#include "creatures/players/grouping/groups.hpp"
 #include "creatures/players/player.hpp"
+#include "io/iologindata.hpp"
+#include "server/network/protocol/protocolgame.hpp"
 
 const uint8_t PlayerVIP::firstID = 1;
 const uint8_t PlayerVIP::lastID = 8;
@@ -37,7 +37,7 @@ uint8_t PlayerVIP::getMaxGroupEntries() const {
 	return 0;
 }
 
-void PlayerVIP::notifyStatusChange(const std::shared_ptr<Player> &loginPlayer, VipStatus_t status, bool message) const {
+void PlayerVIP::notifyStatusChange(const std::shared_ptr<Player> &loginPlayer, VipStatus_t vipStatus, bool message) const {
 	if (!m_player.client) {
 		return;
 	}
@@ -46,12 +46,12 @@ void PlayerVIP::notifyStatusChange(const std::shared_ptr<Player> &loginPlayer, V
 		return;
 	}
 
-	m_player.client->sendUpdatedVIPStatus(loginPlayer->getGUID(), status);
+	m_player.client->sendUpdatedVIPStatus(loginPlayer->getGUID(), vipStatus);
 
 	if (message) {
-		if (status == VipStatus_t::Online) {
+		if (vipStatus == VipStatus_t::Online) {
 			m_player.sendTextMessage(TextMessage(MESSAGE_FAILURE, fmt::format("{} has logged in.", loginPlayer->getName())));
-		} else if (status == VipStatus_t::Offline) {
+		} else if (vipStatus == VipStatus_t::Offline) {
 			m_player.sendTextMessage(TextMessage(MESSAGE_FAILURE, fmt::format("{} has logged out.", loginPlayer->getName())));
 		}
 	}
@@ -101,7 +101,7 @@ bool PlayerVIP::addInternal(uint32_t vipGuid) {
 }
 
 bool PlayerVIP::edit(uint32_t vipGuid, const std::string &description, uint32_t icon, bool notify, const std::vector<uint8_t> &groupsId) const {
-	const auto &it = vipGuids.find(vipGuid);
+	auto it = vipGuids.find(vipGuid);
 	if (it == vipGuids.end()) {
 		return false; // player is not in VIP
 	}
@@ -124,7 +124,7 @@ bool PlayerVIP::edit(uint32_t vipGuid, const std::string &description, uint32_t 
 }
 
 std::shared_ptr<VIPGroup> PlayerVIP::getGroupByID(uint8_t groupId) const {
-	const auto &it = std::ranges::find_if(vipGroups, [groupId](const auto &vipGroup) {
+	auto it = std::ranges::find_if(vipGroups, [groupId](const auto &vipGroup) {
 		return vipGroup->id == groupId;
 	});
 
@@ -133,7 +133,7 @@ std::shared_ptr<VIPGroup> PlayerVIP::getGroupByID(uint8_t groupId) const {
 
 std::shared_ptr<VIPGroup> PlayerVIP::getGroupByName(const std::string &name) const {
 	const auto groupName = name.c_str();
-	const auto &it = std::ranges::find_if(vipGroups, [groupName](const auto &vipGroup) {
+	auto it = std::ranges::find_if(vipGroups, [groupName](const auto &vipGroup) {
 		return strcmp(groupName, vipGroup->name.c_str()) == 0;
 	});
 
@@ -156,7 +156,7 @@ void PlayerVIP::addGroupInternal(uint8_t groupId, const std::string &name, bool 
 }
 
 void PlayerVIP::removeGroup(uint8_t groupId) {
-	const auto &it = std::ranges::find_if(vipGroups, [groupId](const auto &vipGroup) {
+	auto it = std::ranges::find_if(vipGroups, [groupId](const auto &vipGroup) {
 		return vipGroup->id == groupId;
 	});
 

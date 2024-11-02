@@ -8,10 +8,15 @@
  */
 
 #include "creatures/players/grouping/party.hpp"
+
+#include "config/configmanager.hpp"
+#include "creatures/creature.hpp"
+#include "creatures/players/player.hpp"
 #include "game/game.hpp"
-#include "lua/creature/events.hpp"
+#include "game/movement/position.hpp"
 #include "lua/callbacks/event_callback.hpp"
 #include "lua/callbacks/events_callbacks.hpp"
+#include "lua/creature/events.hpp"
 
 std::shared_ptr<Party> Party::create(const std::shared_ptr<Player> &leader) {
 	auto party = std::make_shared<Party>();
@@ -21,6 +26,39 @@ std::shared_ptr<Party> Party::create(const std::shared_ptr<Player> &leader) {
 		party->setSharedExperience(leader, true);
 	}
 	return party;
+}
+
+std::shared_ptr<Party> Party::getParty() {
+	return static_self_cast<Party>();
+}
+
+std::shared_ptr<Player> Party::getLeader() const {
+	return m_leader.lock();
+}
+
+std::vector<std::shared_ptr<Player>> Party::getPlayers() const {
+	std::vector<std::shared_ptr<Player>> players;
+	for (auto &member : memberList) {
+		players.push_back(member);
+	}
+	players.push_back(getLeader());
+	return players;
+}
+
+std::vector<std::shared_ptr<Player>> Party::getMembers() {
+	return memberList;
+}
+
+std::vector<std::shared_ptr<Player>> Party::getInvitees() {
+	return inviteList;
+}
+
+size_t Party::getMemberCount() const {
+	return memberList.size();
+}
+
+size_t Party::getInvitationCount() const {
+	return inviteList.size();
 }
 
 void Party::disband() {
@@ -73,7 +111,7 @@ void Party::disband() {
 	membersData.clear();
 }
 
-bool Party::leaveParty(const std::shared_ptr<Player> &player) {
+bool Party::leaveParty(const std::shared_ptr<Player> &player, bool forceRemove /* = false */) {
 	if (!player) {
 		return false;
 	}
@@ -87,7 +125,8 @@ bool Party::leaveParty(const std::shared_ptr<Player> &player) {
 		return false;
 	}
 
-	if (!g_events().eventPartyOnLeave(getParty(), player)) {
+	bool canRemove = g_events().eventPartyOnLeave(getParty(), player);
+	if (!forceRemove && !canRemove) {
 		return false;
 	}
 
@@ -120,7 +159,7 @@ bool Party::leaveParty(const std::shared_ptr<Player> &player) {
 	}
 
 	// since we already passed the leadership, we remove the player from the list
-	const auto &it = std::ranges::find(memberList, player);
+	auto it = std::ranges::find(memberList, player);
 	if (it != memberList.end()) {
 		memberList.erase(it);
 	}
@@ -166,7 +205,7 @@ bool Party::passPartyLeadership(const std::shared_ptr<Player> &player) {
 	}
 
 	// Remove it before to broadcast the message correctly
-	const auto &it = std::ranges::find(memberList, player);
+	auto it = std::ranges::find(memberList, player);
 	if (it != memberList.end()) {
 		memberList.erase(it);
 	}
@@ -214,7 +253,7 @@ bool Party::joinParty(const std::shared_ptr<Player> &player) {
 		return false;
 	}
 
-	const auto &it = std::ranges::find(inviteList, player);
+	auto it = std::ranges::find(inviteList, player);
 	if (it == inviteList.end()) {
 		return false;
 	}
@@ -263,7 +302,7 @@ bool Party::removeInvite(const std::shared_ptr<Player> &player, bool removeFromP
 		return false;
 	}
 
-	const auto &it = std::ranges::find(inviteList, player);
+	auto it = std::ranges::find(inviteList, player);
 	if (it == inviteList.end()) {
 		return false;
 	}
@@ -387,6 +426,10 @@ void Party::broadcastPartyMessage(MessageClasses msgClass, const std::string &ms
 	}
 }
 
+bool Party::empty() const {
+	return memberList.empty() && inviteList.empty();
+}
+
 void Party::updateSharedExperience() {
 	if (sharedExpActive) {
 		const bool result = getSharedExperienceStatus() == SHAREDEXP_OK;
@@ -442,8 +485,16 @@ bool Party::setSharedExperience(const std::shared_ptr<Player> &player, bool newS
 	return true;
 }
 
+bool Party::isSharedExperienceActive() const {
+	return sharedExpActive;
+}
+
+bool Party::isSharedExperienceEnabled() const {
+	return sharedExpEnabled;
+}
+
 void Party::shareExperience(uint64_t experience, const std::shared_ptr<Creature> &target /* = nullptr*/) {
-	const auto &leader = getLeader();
+	auto leader = getLeader();
 	if (!leader) {
 		return;
 	}
@@ -530,7 +581,7 @@ uint32_t Party::getMaxLevel() {
 }
 
 bool Party::isPlayerActive(const std::shared_ptr<Player> &player) {
-	const auto &it = ticksMap.find(player->getID());
+	auto it = ticksMap.find(player->getID());
 	if (it == ticksMap.end()) {
 		return false;
 	}
@@ -565,7 +616,7 @@ void Party::updatePlayerTicks(const std::shared_ptr<Player> &player, uint32_t po
 }
 
 void Party::clearPlayerPoints(const std::shared_ptr<Player> &player) {
-	const auto &it = ticksMap.find(player->getID());
+	auto it = ticksMap.find(player->getID());
 	if (it != ticksMap.end()) {
 		ticksMap.erase(it);
 		updateSharedExperience();
@@ -747,7 +798,7 @@ void Party::addPlayerLoot(const std::shared_ptr<Player> &player, const std::shar
 	}
 
 	uint32_t count = std::max<uint32_t>(1, item->getItemCount());
-	if (const auto &it = playerAnalyzer->lootMap.find(item->getID()); it != playerAnalyzer->lootMap.end()) {
+	if (auto it = playerAnalyzer->lootMap.find(item->getID()); it != playerAnalyzer->lootMap.end()) {
 		it->second += count;
 	} else {
 		playerAnalyzer->lootMap.insert({ item->getID(), count });
@@ -774,7 +825,7 @@ void Party::addPlayerSupply(const std::shared_ptr<Player> &player, const std::sh
 		membersData.emplace_back(playerAnalyzer);
 	}
 
-	if (const auto &it = playerAnalyzer->supplyMap.find(item->getID()); it != playerAnalyzer->supplyMap.end()) {
+	if (auto it = playerAnalyzer->supplyMap.find(item->getID()); it != playerAnalyzer->supplyMap.end()) {
 		it->second += 1;
 	} else {
 		playerAnalyzer->supplyMap.insert({ item->getID(), 1 });
@@ -851,4 +902,19 @@ void Party::reloadPrices() const {
 			analyzer->supplyPrice += leader->getItemCustomPrice(itemId, true) * price;
 		}
 	}
+}
+
+std::shared_ptr<PartyAnalyzer> Party::getPlayerPartyAnalyzerStruct(uint32_t playerId) const {
+	if (auto it = std::ranges::find_if(membersData, [playerId](const std::shared_ptr<PartyAnalyzer> &preyIt) {
+			return preyIt->id == playerId;
+		});
+	    it != membersData.end()) {
+		return *it;
+	}
+
+	return nullptr;
+}
+
+uint32_t Party::getAnalyzerTimeNow() const {
+	return static_cast<uint32_t>(time(nullptr) - trackerTime);
 }

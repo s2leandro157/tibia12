@@ -7,13 +7,14 @@
  * Website: https://docs.opentibiabr.com/
  */
 
-#include "player_badge.hpp"
-#include "enums/player_cyclopedia.hpp"
+#include "creatures/players/cyclopedia/player_badge.hpp"
+
+#include "account/account.hpp"
 #include "creatures/players/player.hpp"
+#include "enums/account_errors.hpp"
+#include "enums/player_cyclopedia.hpp"
 #include "game/game.hpp"
 #include "kv/kv.hpp"
-
-#include "enums/account_errors.hpp"
 
 PlayerBadge::PlayerBadge(Player &player) :
 	m_player(player) { }
@@ -23,7 +24,7 @@ bool PlayerBadge::hasBadge(uint8_t id) const {
 		return false;
 	}
 
-	if (const auto &it = std::ranges::find_if(m_badgesUnlocked, [id](auto badge_it) {
+	if (auto it = std::ranges::find_if(m_badgesUnlocked, [id](auto badge_it) {
 			return badge_it.first.m_id == id;
 		});
 	    it != m_badgesUnlocked.end()) {

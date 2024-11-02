@@ -8,10 +8,14 @@
  */
 
 #include "creatures/players/grouping/familiars.hpp"
-#include "lib/di/container.hpp"
+
 #include "config/configmanager.hpp"
+#include "lib/di/container.hpp"
 #include "utils/pugicast.hpp"
 #include "utils/tools.hpp"
+#include <creatures/creatures_definitions.hpp>
+
+std::vector<std::shared_ptr<Familiar>> familiars[VOCATION_LAST + 1];
 
 Familiars &Familiars::getInstance() {
 	return inject<Familiars>();
@@ -22,6 +26,10 @@ bool Familiars::reload() {
 		familiarsVector.clear();
 	}
 	return loadFromXml();
+}
+
+std::vector<std::shared_ptr<Familiar>> &Familiars::getFamiliars(uint16_t vocation) {
+	return familiars[vocation];
 }
 
 bool Familiars::loadFromXml() {
@@ -72,7 +80,7 @@ bool Familiars::loadFromXml() {
 }
 
 std::shared_ptr<Familiar> Familiars::getFamiliarByLookType(uint16_t vocation, uint16_t lookType) const {
-	if (const auto &it = std::ranges::find_if(familiars[vocation], [lookType](const auto &familiar_it) {
+	if (auto it = std::ranges::find_if(familiars[vocation], [lookType](const auto &familiar_it) {
 			return familiar_it->lookType == lookType;
 		});
 	    it != familiars[vocation].end()) {

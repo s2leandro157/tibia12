@@ -9,17 +9,28 @@
 
 #pragma once
 
-#include "utils/utils_definitions.hpp"
-#include "enums/player_wheel.hpp"
+#include "creatures/creatures_definitions.hpp"
 #include "creatures/players/wheel/wheel_definitions.hpp"
-#include "creatures/players/wheel/wheel_gems.hpp"
-#include "kv/kv_definitions.hpp"
 
-class Spell;
-class Player;
 class Creature;
-class NetworkMessage;
+class IOWheel;
 class KV;
+class NetworkMessage;
+class Player;
+class Spell;
+class WheelModifierContext;
+class ValueWrapper;
+
+struct CombatDamage;
+
+enum class WheelFragmentType_t : uint8_t;
+enum class WheelGemAffinity_t : uint8_t;
+enum class WheelGemBasicModifier_t : uint8_t;
+enum class WheelGemQuality_t : uint8_t;
+enum class WheelGemSupremeModifier_t : uint8_t;
+enum CombatType_t : uint8_t;
+enum skills_t : int8_t;
+enum Vocation_t : uint16_t;
 
 struct PlayerWheelGem {
 	std::string uuid;
@@ -30,9 +41,7 @@ struct PlayerWheelGem {
 	WheelGemBasicModifier_t basicModifier2;
 	WheelGemSupremeModifier_t supremeModifier;
 
-	std::string toString() const {
-		return fmt::format("[PlayerWheelGem] uuid: {}, locked: {}, affinity: {}, quality: {}, basicModifier1: {}, basicModifier2: {}, supremeModifier: {}", uuid, locked, static_cast<IntType>(affinity), static_cast<IntType>(quality), static_cast<IntType>(basicModifier1), static_cast<IntType>(basicModifier2), static_cast<IntType>(supremeModifier));
-	}
+	std::string toString() const;
 
 	void save(const std::shared_ptr<KV> &kv) const;
 
@@ -81,7 +90,9 @@ public:
 	void saveSlotPointsOnPressSaveButton(NetworkMessage &msg);
 	void addPromotionScrolls(NetworkMessage &msg) const;
 	void addGems(NetworkMessage &msg) const;
-	void sendOpenWheelWindow(NetworkMessage &msg, uint32_t ownerId) const;
+	void addGradeModifiers(NetworkMessage &msg) const;
+	void improveGemGrade(WheelFragmentType_t fragmentType, uint8_t pos);
+	void sendOpenWheelWindow(NetworkMessage &msg, uint32_t ownerId);
 	void sendGiftOfLifeCooldown() const;
 
 	/*
@@ -121,8 +132,6 @@ public:
 	uint8_t getMaxPointsPerSlot(WheelSlots_t slot) const;
 	uint16_t getUnusedPoints() const;
 
-	void resetPlayerBonusData();
-
 	void setPlayerCombatStats(CombatType_t type, int32_t leechAmount);
 
 	void reloadPlayerData() const;
@@ -143,9 +152,13 @@ public:
 
 	WheelStageEnum_t getPlayerSliceStage(const std::string &color) const;
 
+	std::tuple<int, int> getLesserGradeCost(uint8_t grade) const;
+	std::tuple<int, int> getGreaterGradeCost(uint8_t grade) const;
+
 	void printPlayerWheelMethodsBonusData(const PlayerWheelMethodsBonusData &bonusData) const;
 
 private:
+	void addInitialGems();
 	/*
 	 * Open wheel functions helpers
 	 */
@@ -174,6 +187,8 @@ private:
 	uint8_t getOptions(uint32_t ownerId) const;
 
 	std::shared_ptr<KV> gemsKV() const;
+	std::shared_ptr<KV> gemsGradeKV(WheelFragmentType_t quality, uint8_t pos) const;
+	uint8_t getGemGrade(WheelFragmentType_t quality, uint8_t pos) const;
 
 	std::vector<PlayerWheelGem> getRevealedGems() const;
 	std::vector<PlayerWheelGem> getActiveGems() const;
@@ -181,6 +196,8 @@ private:
 	static uint64_t getGemRotateCost(WheelGemQuality_t quality);
 
 	static uint64_t getGemRevealCost(WheelGemQuality_t quality);
+
+	void resetPlayerData();
 
 	// Members variables
 	const uint16_t m_minLevelToStartCountPoints = 50;
@@ -289,7 +306,7 @@ public:
 	// Wheel of destiny - Header get:
 	bool getInstant(WheelInstant_t type) const;
 	bool getHealingLinkUpgrade(const std::string &spell) const;
-	uint8_t getStage(const std::string &name) const;
+	uint8_t getStage(std::string_view name) const;
 	uint8_t getStage(WheelStage_t type) const;
 	WheelSpellGrade_t getSpellUpgrade(const std::string &name) const;
 	int32_t getMajorStat(WheelMajor_t type) const;
@@ -297,7 +314,7 @@ public:
 	int32_t getResistance(CombatType_t type) const;
 	int32_t getMajorStatConditional(const std::string &instant, WheelMajor_t major) const;
 	int64_t getOnThinkTimer(WheelOnThink_t type) const;
-	bool getInstant(const std::string &name) const;
+	bool getInstant(std::string_view name) const;
 	double getMitigationMultiplier() const;
 
 	// Wheel of destiny - Specific functions
@@ -423,6 +440,14 @@ public:
 	WheelGemBasicModifier_t selectBasicModifier2(WheelGemBasicModifier_t modifier1) const;
 
 private:
+	void resetRevelationState();
+	void processActiveGems();
+	void applyStageBonuses();
+	void applyStageBonusForColor(const std::string &color);
+	void applyRedStageBonus(uint8_t stageValue, Vocation_t vocationEnum);
+	void applyPurpleStageBonus(uint8_t stageValue, Vocation_t vocationEnum);
+	void applyBlueStageBonus(uint8_t stageValue, Vocation_t vocationEnum);
+
 	friend class Player;
 	// Reference to the player
 	Player &m_player;
@@ -434,11 +459,11 @@ private:
 	PlayerWheelMethodsBonusData m_playerBonusData;
 	std::unique_ptr<WheelModifierContext> m_modifierContext;
 
-	std::array<uint8_t, static_cast<size_t>(WheelStage_t::TOTAL_COUNT)> m_stages = { 0 };
+	std::array<uint8_t, static_cast<size_t>(WheelStage_t::STAGE_COUNT)> m_stages = { 0 };
 	std::array<int64_t, static_cast<size_t>(WheelOnThink_t::TOTAL_COUNT)> m_onThink = { 0 };
 	std::array<int32_t, static_cast<size_t>(WheelStat_t::TOTAL_COUNT)> m_stats = { 0 };
 	std::array<int32_t, static_cast<size_t>(WheelMajor_t::TOTAL_COUNT)> m_majorStats = { 0 };
-	std::array<bool, static_cast<size_t>(WheelInstant_t::TOTAL_COUNT)> m_instant = { false };
+	std::array<bool, static_cast<size_t>(WheelInstant_t::INSTANT_COUNT)> m_instant = { false };
 	std::array<int32_t, COMBAT_COUNT> m_resistance = { 0 };
 
 	int32_t m_creaturesNearby = 0;

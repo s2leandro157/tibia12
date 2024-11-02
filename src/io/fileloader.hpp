@@ -67,59 +67,22 @@ public:
 
 	template <typename T>
 	bool read(T &ret) {
+		static_assert(std::is_trivially_copyable_v<T>, "Type T must be trivially copyable");
+
 		if (size() < sizeof(T)) {
 			return false;
 		}
 
-		const char* src = p;
-		char* dst = reinterpret_cast<char*>(&ret);
-		size_t remaining = sizeof(T);
+		std::span<const char> charSpan { p, sizeof(T) };
+		auto byteSpan = std::as_bytes(charSpan);
 
-#if defined(__AVX2__)
-		// Use AVX2 para copiar 32 bytes de cada vez
-		while (remaining >= 32) {
-			_mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src)));
-			src += 32;
-			dst += 32;
-			remaining -= 32;
-		}
-#endif
+		std::array<std::byte, sizeof(T)> tempBuffer;
+		std::ranges::copy(byteSpan, tempBuffer.begin());
 
-#if defined(__SSE2__)
-		// Use SSE2 para copiar os bytes restantes
-		while (remaining >= 16) {
-			_mm_storeu_si128(reinterpret_cast<__m128i*>(dst), _mm_loadu_si128(reinterpret_cast<const __m128i*>(src)));
-			src += 16;
-			dst += 16;
-			remaining -= 16;
-		}
-		while (remaining >= 8) {
-			_mm_storel_epi64(reinterpret_cast<__m128i*>(dst), _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src)));
-			src += 8;
-			dst += 8;
-			remaining -= 8;
-		}
-		while (remaining >= 4) {
-			*reinterpret_cast<uint32_t*>(dst) = *reinterpret_cast<const uint32_t*>(src);
-			src += 4;
-			dst += 4;
-			remaining -= 4;
-		}
-		while (remaining >= 2) {
-			*reinterpret_cast<uint16_t*>(dst) = *reinterpret_cast<const uint16_t*>(src);
-			src += 2;
-			dst += 2;
-			remaining -= 2;
-		}
-		while (remaining == 1) {
-			*dst = *src;
-			remaining -= 1;
-		}
-#else
-		memcpy(dst, src, remaining);
-#endif
+		ret = std::bit_cast<T>(tempBuffer);
 
 		p += sizeof(T);
+
 		return true;
 	}
 
@@ -133,59 +96,14 @@ public:
 			return false;
 		}
 
-		char* str = new char[strLen + 1];
-		const char* src = p;
-		char* dst = str;
-		size_t remaining = strLen;
+		std::vector<char> tempBuffer(strLen);
+		std::span<const char> sourceSpan(p, strLen);
+		std::ranges::copy(sourceSpan, tempBuffer.begin());
 
-#if defined(__AVX2__)
-		// Use AVX2 para copiar 32 bytes de cada vez
-		while (remaining >= 32) {
-			_mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src)));
-			src += 32;
-			dst += 32;
-			remaining -= 32;
-		}
-#endif
+		ret.assign(tempBuffer.begin(), tempBuffer.end());
 
-#if defined(__SSE2__)
-		// Use SSE2 para copiar os bytes restantes
-		while (remaining >= 16) {
-			_mm_storeu_si128(reinterpret_cast<__m128i*>(dst), _mm_loadu_si128(reinterpret_cast<const __m128i*>(src)));
-			src += 16;
-			dst += 16;
-			remaining -= 16;
-		}
-		while (remaining >= 8) {
-			_mm_storel_epi64(reinterpret_cast<__m128i*>(dst), _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src)));
-			src += 8;
-			dst += 8;
-			remaining -= 8;
-		}
-		while (remaining >= 4) {
-			*reinterpret_cast<uint32_t*>(dst) = *reinterpret_cast<const uint32_t*>(src);
-			src += 4;
-			dst += 4;
-			remaining -= 4;
-		}
-		while (remaining >= 2) {
-			*reinterpret_cast<uint16_t*>(dst) = *reinterpret_cast<const uint16_t*>(src);
-			src += 2;
-			dst += 2;
-			remaining -= 2;
-		}
-		while (remaining == 1) {
-			*dst = *src;
-			remaining -= 1;
-		}
-#else
-		memcpy(dst, src, remaining);
-#endif
-
-		str[strLen] = 0; // Null-terminate the string
-		ret.assign(str, strLen);
-		delete[] str;
 		p += strLen;
+
 		return true;
 	}
 
@@ -222,55 +140,11 @@ public:
 
 	template <typename T>
 	void write(T add) {
-		char* addr = reinterpret_cast<char*>(&add);
-		size_t remaining = sizeof(T);
-		size_t pos = buffer.size();
-		buffer.resize(pos + remaining);
+		static_assert(std::is_trivially_copyable_v<T>, "Type T must be trivially copyable");
 
-		char* dst = buffer.data() + pos;
-
-#if defined(__AVX2__)
-		// Use AVX2 para copiar 32 bytes de cada vez
-		while (remaining >= 32) {
-			_mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), _mm256_loadu_si256(reinterpret_cast<const __m256i*>(addr)));
-			addr += 32;
-			dst += 32;
-			remaining -= 32;
-		}
-#endif
-
-#if defined(__SSE2__)
-		// Use SSE2 para copiar os bytes restantes
-		while (remaining >= 16) {
-			_mm_storeu_si128(reinterpret_cast<__m128i*>(dst), _mm_loadu_si128(reinterpret_cast<const __m128i*>(addr)));
-			addr += 16;
-			dst += 16;
-			remaining -= 16;
-		}
-		while (remaining >= 8) {
-			_mm_storel_epi64(reinterpret_cast<__m128i*>(dst), _mm_loadl_epi64(reinterpret_cast<const __m128i*>(addr)));
-			addr += 8;
-			dst += 8;
-			remaining -= 8;
-		}
-		while (remaining >= 4) {
-			*reinterpret_cast<uint32_t*>(dst) = *reinterpret_cast<const uint32_t*>(addr);
-			addr += 4;
-			dst += 4;
-			remaining -= 4;
-		}
-		while (remaining >= 2) {
-			*reinterpret_cast<uint16_t*>(dst) = *reinterpret_cast<const uint16_t*>(addr);
-			addr += 2;
-			dst += 2;
-			remaining -= 2;
-		}
-		if (remaining == 1) {
-			*dst = *addr;
-		}
-#else
-		std::copy(addr, addr + remaining, std::back_inserter(buffer));
-#endif
+		auto byteArray = std::bit_cast<std::array<char, sizeof(T)>>(add);
+		std::span<const char> charSpan(byteArray);
+		std::ranges::copy(charSpan, std::back_inserter(buffer));
 	}
 
 	void writeString(const std::string &str) {
@@ -281,57 +155,7 @@ public:
 		}
 
 		write(static_cast<uint16_t>(strLength));
-
-		const char* src = str.data();
-		size_t remaining = strLength;
-		size_t pos = buffer.size();
-		buffer.resize(pos + remaining);
-
-		char* dst = buffer.data() + pos;
-
-#if defined(__AVX2__)
-		// Use AVX2 para copiar 32 bytes de cada vez
-		while (remaining >= 32) {
-			_mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src)));
-			src += 32;
-			dst += 32;
-			remaining -= 32;
-		}
-#endif
-
-#if defined(__SSE2__)
-		// Use SSE2 para copiar os bytes restantes
-		while (remaining >= 16) {
-			_mm_storeu_si128(reinterpret_cast<__m128i*>(dst), _mm_loadu_si128(reinterpret_cast<const __m128i*>(src)));
-			src += 16;
-			dst += 16;
-			remaining -= 16;
-		}
-		while (remaining >= 8) {
-			_mm_storel_epi64(reinterpret_cast<__m128i*>(dst), _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src)));
-			src += 8;
-			dst += 8;
-			remaining -= 8;
-		}
-		while (remaining >= 4) {
-			*reinterpret_cast<uint32_t*>(dst) = *reinterpret_cast<const uint32_t*>(src);
-			src += 4;
-			dst += 4;
-			remaining -= 4;
-		}
-		while (remaining >= 2) {
-			*reinterpret_cast<uint16_t*>(dst) = *reinterpret_cast<const uint16_t*>(src);
-			src += 2;
-			dst += 2;
-			remaining -= 2;
-		}
-		if (remaining == 1) {
-			*dst = *src;
-		}
-#else
-		// Fallback para std::copy se nem AVX2 nem SSE2 estiverem disponíveis
-		std::copy(src, src + remaining, std::back_inserter(buffer));
-#endif
+		std::ranges::copy(str, std::back_inserter(buffer));
 	}
 
 private:

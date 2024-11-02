@@ -8,8 +8,9 @@
  */
 
 #include "items/containers/container.hpp"
-#include "items/decay/decay.hpp"
-#include "io/iomap.hpp"
+
+#include "config/configmanager.hpp"
+#include "creatures/players/player.hpp"
 #include "game/game.hpp"
 #include "map/spectators.hpp"
 
@@ -232,7 +233,10 @@ std::string Container::getContentDescription(bool oldProtocol) {
 std::ostringstream &Container::getContentDescription(std::ostringstream &os, bool sendColoredMessage) {
 	bool firstitem = true;
 	for (ContainerIterator it = iterator(); it.hasNext(); it.advance()) {
-		const auto item = *it;
+		const auto &item = *it;
+		if (!item) {
+			continue;
+		}
 
 		const auto &container = item->getContainer();
 		if (container && !container->empty()) {
@@ -375,7 +379,7 @@ bool Container::isHoldingItem(const std::shared_ptr<Item> &item) {
 bool Container::isHoldingItemWithId(const uint16_t id) {
 	for (ContainerIterator it = iterator(); it.hasNext(); it.advance()) {
 		const auto &item = *it;
-		if (item->getID() == id) {
+		if (item && item->getID() == id) {
 			return true;
 		}
 	}
@@ -459,7 +463,7 @@ ReturnValue Container::queryAdd(int32_t addIndex, const std::shared_ptr<Thing> &
 		return RETURNVALUE_NOTPOSSIBLE;
 	}
 
-	const auto item = addThing->getItem();
+	const auto &item = addThing->getItem();
 	if (item == nullptr) {
 		return RETURNVALUE_NOTPOSSIBLE;
 	}
@@ -647,7 +651,7 @@ std::shared_ptr<Cylinder> Container::queryDestination(int32_t &index, const std:
 		destItem = nullptr;
 	}
 
-	const auto item = thing->getItem();
+	const auto &item = thing->getItem();
 	if (!item) {
 		return getContainer();
 	}
@@ -668,7 +672,7 @@ std::shared_ptr<Cylinder> Container::queryDestination(int32_t &index, const std:
 
 	const bool autoStack = !hasBitSet(FLAG_IGNOREAUTOSTACK, flags);
 	if (autoStack && item->isStackable() && item->getParent() != getContainer()) {
-		if (destItem && (destItem)->equals(item) && (destItem)->getItemCount() < (destItem)->getStackSize()) {
+		if (destItem && destItem->equals(item) && destItem->getItemCount() < destItem->getStackSize()) {
 			return getContainer();
 		}
 
@@ -730,7 +734,7 @@ void Container::updateThing(const std::shared_ptr<Thing> &thing, uint16_t itemId
 		return /*RETURNVALUE_NOTPOSSIBLE*/;
 	}
 
-	const auto item = thing->getItem();
+	const auto &item = thing->getItem();
 	if (item == nullptr) {
 		return /*RETURNVALUE_NOTPOSSIBLE*/;
 	}
@@ -747,7 +751,7 @@ void Container::updateThing(const std::shared_ptr<Thing> &thing, uint16_t itemId
 }
 
 void Container::replaceThing(uint32_t index, const std::shared_ptr<Thing> &thing) {
-	const auto item = thing->getItem();
+	const auto &item = thing->getItem();
 	if (!item) {
 		return /*RETURNVALUE_NOTPOSSIBLE*/;
 	}
@@ -781,7 +785,7 @@ void Container::removeThing(const std::shared_ptr<Thing> &thing, uint32_t count)
 	}
 
 	if (item->isStackable() && count != item->getItemCount()) {
-		const uint8_t newCount = static_cast<uint8_t>(std::max<int32_t>(0, item->getItemCount() - count));
+		const auto newCount = static_cast<uint8_t>(std::max<int32_t>(0, item->getItemCount() - count));
 		const int32_t oldWeight = item->getWeight();
 		item->setItemCount(newCount);
 		updateItemWeight(-oldWeight + item->getWeight());

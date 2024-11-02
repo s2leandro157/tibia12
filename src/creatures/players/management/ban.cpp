@@ -8,6 +8,7 @@
  */
 
 #include "creatures/players/management/ban.hpp"
+
 #include "database/database.hpp"
 #include "database/databasetasks.hpp"
 #include "utils/tools.hpp"
@@ -17,7 +18,7 @@ bool Ban::acceptConnection(uint32_t clientIP) {
 
 	const uint64_t currentTime = OTSYS_TIME();
 
-	const auto &it = ipConnectMap.find(clientIP);
+	auto it = ipConnectMap.find(clientIP);
 	if (it == ipConnectMap.end()) {
 		ipConnectMap.emplace(clientIP, ConnectBlock(currentTime, 0, 1));
 		return true;

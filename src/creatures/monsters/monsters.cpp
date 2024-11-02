@@ -9,10 +9,13 @@
 
 #include "creatures/monsters/monsters.hpp"
 
-#include "creatures/combat/spells.hpp"
+#include "config/configmanager.hpp"
 #include "creatures/combat/combat.hpp"
+#include "creatures/combat/condition.hpp"
+#include "creatures/combat/spells.hpp"
 #include "game/game.hpp"
 #include "items/weapons/weapons.hpp"
+#include "lua/scripts/luascript.hpp"
 
 void MonsterType::loadLoot(const std::shared_ptr<MonsterType> &monsterType, LootBlock lootBlock) const {
 	if (lootBlock.childLoot.empty()) {
@@ -307,9 +310,41 @@ bool MonsterType::loadCallback(LuaScriptInterface* scriptInterface) {
 	return true;
 }
 
+uint16_t MonsterType::getBaseSpeed() const {
+	return info.baseSpeed;
+}
+
+void MonsterType::setBaseSpeed(const uint16_t initBaseSpeed) {
+	info.baseSpeed = initBaseSpeed;
+}
+
+float MonsterType::getHealthMultiplier() const {
+	return isBoss() ? g_configManager().getFloat(RATE_BOSS_HEALTH) : g_configManager().getFloat(RATE_MONSTER_HEALTH);
+}
+
+float MonsterType::getAttackMultiplier() const {
+	return isBoss() ? g_configManager().getFloat(RATE_BOSS_ATTACK) : g_configManager().getFloat(RATE_MONSTER_ATTACK);
+}
+
+float MonsterType::getDefenseMultiplier() const {
+	return isBoss() ? g_configManager().getFloat(RATE_BOSS_DEFENSE) : g_configManager().getFloat(RATE_MONSTER_DEFENSE);
+}
+
+bool MonsterType::isBoss() const {
+	return !info.bosstiaryClass.empty();
+}
+
+Monsters &Monsters::getInstance() {
+	return inject<Monsters>();
+}
+
+void Monsters::clear() {
+	monsters.clear();
+}
+
 std::shared_ptr<MonsterType> Monsters::getMonsterType(const std::string &name, bool silent /* = false*/) const {
 	std::string lowerCaseName = asLowerCaseString(name);
-	if (const auto &it = monsters.find(lowerCaseName);
+	if (auto it = monsters.find(lowerCaseName);
 	    it != monsters.end()
 	    // We will only return the MonsterType if it match the exact name of the monster
 	    && it->first.find(lowerCaseName) != std::basic_string<char>::npos) {
@@ -328,7 +363,7 @@ std::shared_ptr<MonsterType> Monsters::getMonsterTypeByRaceId(uint16_t raceId, b
 	}
 
 	const auto &monster_race_map = g_game().getBestiaryList();
-	const auto &it = monster_race_map.find(raceId);
+	auto it = monster_race_map.find(raceId);
 	if (it == monster_race_map.end()) {
 		return nullptr;
 	}

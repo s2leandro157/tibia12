@@ -7,9 +7,10 @@
  * Website: https://docs.opentibiabr.com/
  */
 
+#include "creatures/players/grouping/groups.hpp"
+
 #include "config/configmanager.hpp"
 #include "game/game.hpp"
-#include "creatures/players/grouping/groups.hpp"
 #include "utils/pugicast.hpp"
 #include "utils/tools.hpp"
 
@@ -98,11 +99,15 @@ bool Groups::load() {
 }
 
 std::shared_ptr<Group> Groups::getGroup(uint16_t id) const {
-	if (const auto &it = std::ranges::find_if(groups_vector, [id](auto group_it) {
+	if (auto it = std::ranges::find_if(groups_vector, [id](auto group_it) {
 			return group_it->id == id;
 		});
 	    it != groups_vector.end()) {
 		return *it;
 	}
 	return nullptr;
+}
+
+std::vector<std::shared_ptr<Group>> &Groups::getGroups() {
+	return groups_vector;
 }
